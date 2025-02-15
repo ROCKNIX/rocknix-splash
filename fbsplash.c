@@ -104,12 +104,12 @@ DisplayInfo* calculate_display_info(Framebuffer *fb) {
     info->screen_height = fb->vinfo.yres;
 
     // Calculate SVG dimensions to fit in screen while maintaining aspect ratio
-    float target_width = info->screen_width * 0.8f;  // Use 80% of screen width
+    float target_width = info->screen_width * 0.6f;  // Use 60% of screen width
     float target_height = target_width * (500.0f / 1284.0f);  // Maintain SVG aspect ratio
 
     // Adjust if height is too large
-    if (target_height > info->screen_height * 0.8f) {
-        target_height = info->screen_height * 0.8f;
+    if (target_height > info->screen_height * 0.6f) {
+        target_height = info->screen_height * 0.6f;
         target_width = target_height * (1284.0f / 500.0f);
     }
 
