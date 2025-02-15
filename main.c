@@ -3,10 +3,10 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
-#include <getopt.h>
 #include "fbsplash.h"
 #include "svg_parser.h"
 #include "svg_renderer.h"
+#include "dt_rotation.h"
 
 /*
  * SVG path data for rendering the logo
@@ -46,47 +46,14 @@ const char *svg_colors[] = {
 
 #define NUM_PATHS (sizeof(svg_paths) / sizeof(svg_paths[0]))
 
-/* Display usage information for the program */
-void print_usage(const char *prog_name) {
-    fprintf(stderr, "Usage: %s [options]\n", prog_name);
-    fprintf(stderr, "Options:\n");
-    fprintf(stderr, "  --rotate <angle>  Rotate SVG by angle (90, 180, or 270 degrees)\n");
-    fprintf(stderr, "  --help           Display this help message\n");
-}
-
 /*
  * Main program entry point
  */
-int main(int argc, char *argv[]) {
+int main(void) {
     const char *fb_device = "/dev/fb0";
-    int rotation = 0;
 
-    // Define command line options
-    static struct option long_options[] = {
-        {"rotate", required_argument, 0, 'r'},
-        {"help", no_argument, 0, 'h'},
-        {0, 0, 0, 0}
-    };
-
-    // Parse command line options
-    int opt;
-    while ((opt = getopt_long(argc, argv, "r:h", long_options, NULL)) != -1) {
-        switch (opt) {
-            case 'r':
-                rotation = atoi(optarg);
-                if (rotation != 90 && rotation != 180 && rotation != 270) {
-                    fprintf(stderr, "Error: rotation must be 90, 180, or 270\n");
-                    return 1;
-                }
-                break;
-            case 'h':
-                print_usage(argv[0]);
-                return 0;
-            default:
-                print_usage(argv[0]);
-                return 1;
-        }
-    }
+    // Get rotation from device tree
+    int rotation = get_display_rotation();
 
     // Check framebuffer device accessibility
     if (access(fb_device, R_OK | W_OK) != 0) {
@@ -124,10 +91,9 @@ int main(int argc, char *argv[]) {
             continue;
         }
 
-        // Apply rotation if specified
-        if (rotation != 0) {
+        // Apply rotation from device tree if specified
+        if (rotation)
             rotate_svg_path(svg, rotation);
-        }
 
         // Render the path
         render_svg_path(fb, svg, display_info);

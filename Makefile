@@ -1,5 +1,5 @@
 # Source files to be compiled
-SRCS=main.c fbsplash.c svg_parser.c svg_renderer.c
+SRCS=main.c fbsplash.c svg_parser.c svg_renderer.c dt_rotation.c
 
 # Generate object file names from source files by replacing .c with .o
 OBJS=$(SRCS:.c=.o)
