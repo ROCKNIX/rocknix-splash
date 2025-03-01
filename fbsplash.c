@@ -3,29 +3,31 @@
 #include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <sys/mman.h>
 #include <sys/ioctl.h>
 #include "fbsplash.h"
 
 /* Initialize the framebuffer device
- * Opens the device, gets screen information, and maps the framebuffer to memory
+ * Opens the device, gets screen information, and creates a buffer
  */
 Framebuffer* fb_init(const char *fb_device) {
     // Allocate and initialize framebuffer structure
     Framebuffer *fb = calloc(1, sizeof(Framebuffer));
     if (!fb) {
+        fprintf(stderr, "Failed to allocate framebuffer structure\n");
         return NULL;
     }
 
     // Open the framebuffer device
     fb->fd = open(fb_device, O_RDWR);
     if (fb->fd == -1) {
+        fprintf(stderr, "Failed to open framebuffer device: %m\n");
         free(fb);
         return NULL;
     }
 
     // Get variable screen information
     if (ioctl(fb->fd, FBIOGET_VSCREENINFO, &fb->vinfo) == -1) {
+        fprintf(stderr, "Failed to get variable screen info: %m\n");
         close(fb->fd);
         free(fb);
         return NULL;
@@ -33,39 +35,28 @@ Framebuffer* fb_init(const char *fb_device) {
 
     // Get fixed screen information
     if (ioctl(fb->fd, FBIOGET_FSCREENINFO, &fb->finfo) == -1) {
+        fprintf(stderr, "Failed to get fixed screen info: %m\n");
         close(fb->fd);
         free(fb);
         return NULL;
     }
 
     // Calculate total screen size in bytes
-    fb->screensize = fb->vinfo.xres * fb->vinfo.yres * (fb->vinfo.bits_per_pixel / 8);
+    fb->screensize = fb->vinfo.yres_virtual * fb->finfo.line_length;
 
-    // Map framebuffer to memory
-    fb->buffer = mmap(NULL, fb->screensize, PROT_READ | PROT_WRITE, MAP_SHARED, fb->fd, 0);
-
-    if (fb->buffer == MAP_FAILED) {
+    // Allocate a software buffer instead of memory mapping
+    fb->buffer = malloc(fb->screensize);
+    if (!fb->buffer) {
+        fprintf(stderr, "Failed to allocate memory buffer\n");
         close(fb->fd);
         free(fb);
         return NULL;
     }
 
-    return fb;
-}
+    // Initialize buffer to black
+    memset(fb->buffer, 0, fb->screensize);
 
-/* Clean up framebuffer resources
- * Unmaps memory and closes the device
- */
-void fb_cleanup(Framebuffer *fb) {
-    if (fb) {
-        if (fb->buffer != MAP_FAILED && fb->buffer != NULL) {
-            munmap(fb->buffer, fb->screensize);
-        }
-        if (fb->fd >= 0) {
-            close(fb->fd);
-        }
-        free(fb);
-    }
+    return fb;
 }
 
 /* Set a pixel in the framebuffer
@@ -77,7 +68,7 @@ void set_pixel(Framebuffer *fb, uint32_t x, uint32_t y, uint32_t color) {
         return;
     }
 
-    // Calculate pixel offset in framebuffer
+    // Calculate pixel offset in buffer
     size_t location = (x + fb->vinfo.xoffset) * (fb->vinfo.bits_per_pixel / 8) +
                       (y + fb->vinfo.yoffset) * fb->finfo.line_length;
 
@@ -88,6 +79,27 @@ void set_pixel(Framebuffer *fb, uint32_t x, uint32_t y, uint32_t color) {
     // Write pixel color (currently only supports 32-bit color depth)
     if (fb->vinfo.bits_per_pixel == 32) {
         *((uint32_t*)(fb->buffer + location)) = color;
+    }
+}
+
+/* Write the buffer to the framebuffer device */
+void fb_flush(Framebuffer *fb) {
+    if (fb && fb->buffer) {
+        lseek(fb->fd, 0, SEEK_SET);
+        write(fb->fd, fb->buffer, fb->screensize);
+    }
+}
+
+/* Clean up framebuffer resources */
+void fb_cleanup(Framebuffer *fb) {
+    if (fb) {
+        if (fb->buffer) {
+            free(fb->buffer);
+        }
+        if (fb->fd >= 0) {
+            close(fb->fd);
+        }
+        free(fb);
     }
 }
 
