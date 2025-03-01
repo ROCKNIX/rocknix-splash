@@ -100,6 +100,9 @@ int main(void) {
         free_svg_path(svg);
     }
 
+    // Flush changes to the framebuffer
+    fb_flush(fb);
+
     // Clean up
     free(display_info);
     fb_cleanup(fb);

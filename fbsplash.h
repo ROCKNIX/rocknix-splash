@@ -6,7 +6,7 @@
 
 /* Framebuffer structure holding device information and buffer
  * fd: File descriptor for the framebuffer device
- * buffer: Memory-mapped framebuffer
+ * buffer: Software buffer for drawing operations
  * vinfo: Variable screen information (resolution, bit depth, etc.)
  * finfo: Fixed screen information (memory length, line length, etc.)
  * screensize: Total size of the framebuffer in bytes
@@ -46,6 +46,9 @@ void render_svg(Framebuffer *fb, const char *svg_data, DisplayInfo *display_info
  * color: 32-bit RGBA color value
  */
 void set_pixel(Framebuffer *fb, uint32_t x, uint32_t y, uint32_t color);
+
+/* Write the internal buffer to the framebuffer device */
+void fb_flush(Framebuffer *fb);
 
 /* Calculate display information for SVG rendering
  * Returns: Pointer to DisplayInfo structure with calculated values
