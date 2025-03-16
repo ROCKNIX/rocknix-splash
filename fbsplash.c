@@ -44,7 +44,7 @@ Framebuffer* fb_init(const char *fb_device) {
     // Calculate total screen size in bytes
     fb->screensize = fb->vinfo.yres_virtual * fb->finfo.line_length;
 
-    // Allocate a software buffer instead of memory mapping
+    // Allocate a software buffer for double buffering and anti-aliasing
     fb->buffer = malloc(fb->screensize);
     if (!fb->buffer) {
         fprintf(stderr, "Failed to allocate memory buffer\n");
@@ -56,10 +56,14 @@ Framebuffer* fb_init(const char *fb_device) {
     // Initialize buffer to black
     memset(fb->buffer, 0, fb->screensize);
 
+    // Read current framebuffer content for proper blending
+    lseek(fb->fd, 0, SEEK_SET);
+    read(fb->fd, fb->buffer, fb->screensize);
+
     return fb;
 }
 
-/* Set a pixel in the framebuffer
+/* Set a pixel in the framebuffer with alpha blending
  * Handles bounds checking and pixel format
  */
 void set_pixel(Framebuffer *fb, uint32_t x, uint32_t y, uint32_t color) {
@@ -76,10 +80,80 @@ void set_pixel(Framebuffer *fb, uint32_t x, uint32_t y, uint32_t color) {
         return;
     }
 
-    // Write pixel color (currently only supports 32-bit color depth)
+    // Handle different bit depths
     if (fb->vinfo.bits_per_pixel == 32) {
+        // Direct write for 32-bit color depth
         *((uint32_t*)(fb->buffer + location)) = color;
     }
+    else if (fb->vinfo.bits_per_pixel == 16) {
+        // Convert 32-bit RGBA to 16-bit RGB (5-6-5 format)
+        uint8_t r = (color >> 16) & 0xFF;
+        uint8_t g = (color >> 8) & 0xFF;
+        uint8_t b = color & 0xFF;
+
+        // Convert to 5-6-5 format
+        uint16_t color16 = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3);
+        *((uint16_t*)(fb->buffer + location)) = color16;
+    }
+}
+
+/* Blend two pixels according to alpha value
+ * alpha: 0.0 (fully transparent) to 1.0 (fully opaque)
+ */
+void blend_pixel(Framebuffer *fb, uint32_t x, uint32_t y, uint32_t color, float alpha) {
+    // Check bounds
+    if (x >= fb->vinfo.xres || y >= fb->vinfo.yres || alpha <= 0.0f) {
+        return;
+    }
+
+    // Full opacity, just set the pixel directly
+    if (alpha >= 1.0f) {
+        set_pixel(fb, x, y, color);
+        return;
+    }
+
+    // Calculate pixel location
+    size_t location = (x + fb->vinfo.xoffset) * (fb->vinfo.bits_per_pixel / 8) +
+                     (y + fb->vinfo.yoffset) * fb->finfo.line_length;
+
+    if (location >= fb->screensize) {
+        return;
+    }
+
+    // Extract foreground color components
+    uint8_t fg_r = (color >> 16) & 0xFF;
+    uint8_t fg_g = (color >> 8) & 0xFF;
+    uint8_t fg_b = color & 0xFF;
+
+    // Get current background color
+    uint32_t bg_color = 0;
+    if (fb->vinfo.bits_per_pixel == 32) {
+        bg_color = *((uint32_t*)(fb->buffer + location));
+    }
+    else if (fb->vinfo.bits_per_pixel == 16) {
+        uint16_t color16 = *((uint16_t*)(fb->buffer + location));
+        // Convert 16-bit 5-6-5 format to 24-bit
+        uint8_t r = ((color16 >> 11) & 0x1F) << 3;
+        uint8_t g = ((color16 >> 5) & 0x3F) << 2;
+        uint8_t b = (color16 & 0x1F) << 3;
+        bg_color = (r << 16) | (g << 8) | b;
+    }
+
+    // Extract background color components
+    uint8_t bg_r = (bg_color >> 16) & 0xFF;
+    uint8_t bg_g = (bg_color >> 8) & 0xFF;
+    uint8_t bg_b = bg_color & 0xFF;
+
+    // Blend colors
+    uint8_t r = (uint8_t)(fg_r * alpha + bg_r * (1.0f - alpha));
+    uint8_t g = (uint8_t)(fg_g * alpha + bg_g * (1.0f - alpha));
+    uint8_t b = (uint8_t)(fg_b * alpha + bg_b * (1.0f - alpha));
+
+    // Create blended color
+    uint32_t blended = (r << 16) | (g << 8) | b;
+
+    // Write blended pixel
+    set_pixel(fb, x, y, blended);
 }
 
 /* Write the buffer to the framebuffer device */

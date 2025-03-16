@@ -39,13 +39,15 @@ Framebuffer* fb_init(const char *fb_device);
 /* Clean up and free framebuffer resources */
 void fb_cleanup(Framebuffer *fb);
 
-/* Render an SVG to the framebuffer */
-void render_svg(Framebuffer *fb, const char *svg_data, DisplayInfo *display_info);
-
 /* Set a single pixel in the framebuffer
  * color: 32-bit RGBA color value
  */
 void set_pixel(Framebuffer *fb, uint32_t x, uint32_t y, uint32_t color);
+
+/* Blend a pixel with alpha transparency
+ * alpha: 0.0 (transparent) to 1.0 (opaque)
+ */
+void blend_pixel(Framebuffer *fb, uint32_t x, uint32_t y, uint32_t color, float alpha);
 
 /* Write the internal buffer to the framebuffer device */
 void fb_flush(Framebuffer *fb);
